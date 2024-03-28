@@ -118,7 +118,6 @@ prometheus-client==0.19.0
 prompt-toolkit==3.0.39
 protobuf==4.24.2
 psutil==5.9.5
-# psycopg2==2.9.6
 pure-eval==0.2.2
 pyarrow==13.0.0
 pycparser==2.21
@@ -131,8 +130,6 @@ pyparsing==3.0.9
 python-dateutil==2.8.2
 python-dotenv==0.14.0
 python-json-logger==2.0.7
-pytz==2023.3
-pywin32==306
 pywinpty==2.0.12
 PyYAML==6.0.1
 pyzmq==25.1.1
