@@ -7,22 +7,29 @@ import plotly.io as pio
 import matplotlib.pyplot as plt
 from phik import phik_matrix
 import joblib
+from fetch_data import load_data, load_model
 import streamlit.components.v1 as components
 import time
 
-df = pd.read_csv('./data/rooms.csv')
+query = '''select 
+ads.id,
+"Cost" "Стоимость",
+"Longitude" "Долгота",
+"Latitude" "Широта",
+"TotalArea" "Общая площадь",
+"Floor" "Этаж",
+room_type.name "Тип квартиры",
+room_count "Количество комнат",
+metro_min "Расстояние до метро",
+administrative_districts.name "Название района",
+cost_type.name "Ценовой сегмент"
+from apartments.ads ads
+inner join apartments.room_type room_type on ads.room_type_id = room_type.id
+inner join apartments.room_type administrative_districts on ads.administrative_name_id = administrative_districts.id
+inner join apartments.cost_type cost_type on ads.cost_type_id = cost_type.id'''
+df = load_data(query)
 data = df[:]
-data = data.rename(columns={'Cost': 'Стоимость',
-                            'Longitude': 'Долгота',
-                            'Latitude': 'Широта',
-                            'TotalArea': 'Общая площадь',
-                            'Floor': 'Этаж',
-                            'room_type': 'Тип комнаты',
-                            'room_count': 'Количество комнат',
-                            'metro_min': 'Расстояние до метро',
-                            'admin_name': 'Название района',
-                            'cost_type': 'Тип стоимости'})
-pipeline_loaded = joblib.load('./model.pkl')
+pipeline_loaded = load_model('./model.pkl')
 
 st.title('Aномальные предложения: изучение рынка недвижимости')
 st.text('''
@@ -41,8 +48,8 @@ with st.expander('Показать данные'):
 st.header('Визуальный анализ')
 st.text('На графике показано распределение объявлений по районам Санкт-Петербурга')
 # -------------------------------------------------------------
-labels = df['admin_name'].value_counts().index.tolist()
-values = df['admin_name'].value_counts().values.tolist()
+labels = df['Название района'].value_counts().index.tolist()
+values = df['Название района'].value_counts().values.tolist()
 
 fig = px.bar(x=labels, y=values)
 fig.update_xaxes(tickangle=90)
@@ -55,14 +62,14 @@ st.text('''
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 5))
 fig.subplots_adjust(wspace=0)
 
-overall_ratios = df['room_type'].value_counts() / df['room_type'].value_counts().sum()
+overall_ratios = df['Тип квартиры'].value_counts() / df['Тип квартиры'].value_counts().sum()
 labels = ['Квартира', 'Квартира-студия', 'Апартаменты-студия']
 explode = [0.1, 0, 0]
 angle = -180 * overall_ratios[0]
 wedges, *_ = ax1.pie(overall_ratios, autopct='%1.1f%%', startangle=angle,
                      labels=labels, explode=explode)
 
-age_ratios = df[df['room_type']==1].groupby('room_count').count()['Cost'] / df[df['room_type']==1].groupby('room_count').count()['Cost'].sum()
+age_ratios = df[df['Тип квартиры']=='Квартира'].groupby('Количество комнат').count()['Стоимость'] / df[df['Тип квартиры']=='Квартира'].groupby('Количество комнат').count()['Стоимость'].sum()
 age_labels = ['1 комната', '2 комната', '3 комната', '4 комната']
 bottom = 1
 width = .2
@@ -86,15 +93,15 @@ st.text('''
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
 fig.subplots_adjust(wspace=0)
 
-overall_ratios = df['cost_type'].value_counts()[:-1] / df['cost_type'].value_counts().sum()
-labels = df['cost_type'].value_counts()[:-1].index
+overall_ratios = df['Ценовой сегмент'].value_counts()[:-1] / df['Ценовой сегмент'].value_counts().sum()
+labels = df['Ценовой сегмент'].value_counts()[:-1].index
 explode = [0.1, 0, 0, 0]
 
 angle = -180 * overall_ratios[0]
 wedges, *_ = ax1.pie(overall_ratios, autopct='%1.1f%%', startangle=angle,
                      labels=labels, explode=explode)
 
-age_ratios = df[df['cost_type']=="Высокий сегмент"].groupby('room_count').count()['Cost'] / df[df['cost_type']=="Высокий сегмент"].groupby('room_count').count()['Cost'].sum()
+age_ratios = df[df['Ценовой сегмент']=="Высокий"].groupby('Количество комнат').count()['Ценовой сегмент'] / df[df['Ценовой сегмент']=="Высокий"].groupby('Количество комнат').count()['Стоимость'].sum()
 age_labels = ['Квартира', 'Квартира-студия', 'Апартаменты-студия']
 bottom = 2
 width = .9
@@ -114,14 +121,14 @@ st.pyplot(fig)
 # -------------------------------------------------------------
 st.text('''
 Интересно, как по районам распределены ценовые сегменты''')
-pivot_tab = df.groupby(['admin_name', 'cost_type']).size().reset_index(name='Количество')
-pivot_tab = pivot_tab.pivot(index='admin_name', columns='cost_type', values='Количество')
+pivot_tab = df.groupby(['Название района', 'Ценовой сегмент']).size().reset_index(name='Количество')
+pivot_tab = pivot_tab.pivot(index='Название района', columns='Ценовой сегмент', values='Количество')
 pivot_tab = pivot_tab.fillna(0)
 df_norm = pivot_tab.div(pivot_tab.sum(axis=1), axis=0)
 df_norm = df_norm.reset_index()
-df_norm = df_norm.sort_values(['Высокий сегмент', 'Премиум сегмент','Средний сегмент','Элитный сегмент','Низкий сегмент'], ascending=False)
+df_norm = df_norm.sort_values(['Высокий', 'Премиум','Средний','Элитный','Низкий'], ascending=False)
 
-fig = px.bar(df_norm, x='admin_name', y=['Высокий сегмент', 'Премиум сегмент', 'Средний сегмент', 'Элитный сегмент', 'Низкий сегмент'],
+fig = px.bar(df_norm, x='Название района', y=['Высокий', 'Премиум', 'Средний', 'Элитный', 'Низкий'],
             barmode='stack')
 fig.update_layout(
     xaxis=dict(tickangle=90),
@@ -171,28 +178,33 @@ components.html(map_html, height=600)
 with st.sidebar:
     st.title('Окно предсказаний')
     Cost=st.number_input(
-    "Стоимость недвижимости:", min_value=df['Cost'].min().astype(int),
-    max_value=df['Cost'].max().astype(int), value=df['Cost'].mean().astype(int), step=1_000_000,
+    "Стоимость недвижимости:", min_value=df['Стоимость'].min().astype(int),
+    max_value=df['Стоимость'].max().astype(int), value=df['Стоимость'].mean().astype(int), step=1_000_000,
     )
     TotalArea=st.slider(
-    "Общая площадь:", min_value=df['TotalArea'].min().astype(int),
-    max_value=df['TotalArea'].max().astype(int), value=df['TotalArea'].mean().astype(int), step=10,
+    "Общая площадь:", min_value=df['Общая площадь'].min().astype(int),
+    max_value=df['Общая площадь'].max().astype(int), value=df['Общая площадь'].mean().astype(int), step=10,
     )
     Floor=st.slider(
-    "Этаж:", min_value=df['Floor'].min().astype(int),
-    max_value=df['Floor'].max().astype(int), value=df['Floor'].mean().astype(int), step=1,
+    "Этаж:", min_value=df['Этаж'].min().astype(int),
+    max_value=df['Этаж'].max().astype(int), value=df['Этаж'].mean().astype(int), step=1,
     )
     room_type=st.radio(
     'Тип недвижимости:',
-    sorted(df['room_type'].unique()))
+    sorted(df['Тип квартиры'].unique()))
 
+    room_type_d = {
+    'Кварира':	1,
+    'Квартира-студия':	0,
+    'Апартаменты':-1}
+    room_type = room_type_d[room_type]
     room_count=st.radio(
     'Количество комнат:',
-    sorted(df['room_count'].unique()))
+    sorted(df['Количество комнат'].unique()))
 
     metro_min=st.radio(
     'Сколько минут до метро?',
-    sorted(df['metro_min'].unique()))
+    sorted(df['Расстояние до метро'].unique()))
     if st.button('Показать прогноз'):
         with st.spinner('Ожидайте...'):
             time.sleep(1)
